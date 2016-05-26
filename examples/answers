@@ -1,0 +1,55 @@
+/*
+ * answers
+ *
+ * Plik z odpowiedziami studentów do testów
+ * Plik rośnie: przesyłane odpowiedzi są kolejno dopisywane
+ * do odpowiednich testów
+ *
+ * Wyjaśnienie na przykładzie testu c10ae7c7-3b1d-48d7-b949-e0165b3f3822:
+ *
+ * Użytkownik szczepar przesłał rozwiązanie testu
+ * (wartość klucza answers nie jest nullem)
+ *
+ * Użytkownik martycz- rozpoczął rozwiązywanie testu 1d4f18b5a1ff1966f98b1cd81161eeb2
+ * lecz nie przesłał jeszcze odpowiedzi (answers ustawione na null,
+ * obecny klucz maximumTimeOfApproval ustalony w momencie wysłania 
+ * klientowi testu do rozwiązania)
+ */ 
+
+[
+    {
+        "testId": "c10ae7c7-3b1d-48d7-b949-e0165b3f3822",
+        "subjects": [
+            {
+                "name": "szczepar",
+                "answers": [
+                    [ true, true, true, false, true ],
+                    [ true, false, false, false, false ],
+                    [ false, true, false, false, false ]
+                ]
+            },
+            {
+                "name": "martycz-",
+                "answers": [
+                    [ true, true, true, true, true ],
+                    [ true, true, false, false, false ],
+                    [ false, true, false, true, false ]
+                ]
+            }
+        ]
+    },
+    {
+        "testId": "6fc51d84-b28b-4390-9c09-74ec4107ed00",
+        "subjects": [
+            {
+                "name": "szczepar",
+                "answers": [ 3, 0, 1 ]
+            },
+            {
+                "name": "martycz-",
+                "answers": null,
+                "maximumTimeOfApproval": 1460584576
+            }
+        ]
+    }
+]

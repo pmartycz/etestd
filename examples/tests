@@ -1,0 +1,102 @@
+/*
+ * tests
+ *
+ * Plik z testami
+ * Identyfikator (w formacie UUID) generowany automatycznie
+ * przy tworzeniu testu (nie jest przesyłany przez klienta)
+ *
+ * Przesyłanie testu do klienta:
+ *
+ * Gdy resultsAvailable == false serwer nie przesyła
+ * klucza correctAnswers do klienta
+ *
+ * Serwer dodaje klucz userAnswers z odpowiedziami
+ * użytkownika jeżeli występują w pliku answers
+ */ 
+
+[
+    {
+        "id": "c10ae7c7-3b1d-48d7-b949-e0165b3f3822",
+        "name": "Przykładowy egzamin (test wielokrotnego wyboru)",
+        "type": "multi",
+        "owner": "nalbachm",
+        "groups": [ "id01p01", "id01p02", "iz01p01", "iz01p02", "iz01p03" ],
+        "timeLimit": 10,
+        "startTime": 1460583976,
+        "endTime": 1460603976,
+        "resultsAvailable": false,
+        "questions": [
+            {
+                "text": "Które z typów danych występują w formacie JSON?",
+                "options": [
+                    "Liczbowy", "Napisowy", "Boolowski", "Wskaźnikowy", "Tablicowy"
+                ]
+            },
+            {
+                "text": "Na jakim kontynencie leży Polska?",
+                "options": [
+                    "Europa",
+                    "Azja",
+                    "Afryka",
+                    "Ameryka Południowa",
+                    "Ameryka Północna"
+                ]
+            },
+            {
+                "text": "Jak ma na nazwisko twórca Linuksa?",
+                "options": [
+                    "Gates",
+                    "Torvalds",
+                    "Jobs",
+                    "Kernighan",
+                    "Pike"
+                ]
+            }
+        ],
+        "correctAnswers": [
+            [ true, true, true, false, true ],
+            [ true, false, false, false, false ],
+            [ false, true, false, false, false ]
+        ]
+    },
+    {
+        "id": "6fc51d84-b28b-4390-9c09-74ec4107ed00",
+        "name": "Przykładowy egzamin 2 (test jednokrotnego wyboru)",
+        "type": "single",
+        "owner": "nalbachm",
+        "groups": [ "id01p01", "id01p02", "iz01p01", "iz01p02", "iz01p03" ],
+        "timeLimit": 10,
+        "startTime": 1460583976,
+        "endTime": 1460603976,
+        "resultsAvailable": true,
+        "questions": [
+            {
+                "text": "Który z typów danych _nie_ występuje w formacie JSON?",
+                "options": [
+                    "Liczbowy", "Napisowy", "Boolowski", "Wskaźnikowy", "Tablicowy"
+                ]
+            },
+            {
+                "text": "Na jakim kontynencie leży Polska?",
+                "options": [
+                    "Europa",
+                    "Azja",
+                    "Afryka",
+                    "Ameryka Południowa",
+                    "Ameryka Północna"
+                ]
+            },
+            {
+                "text": "Jak ma na nazwisko twórca Linuksa?",
+                "options": [
+                    "Gates",
+                    "Torvalds",
+                    "Jobs",
+                    "Kernighan",
+                    "Pike"
+                ]
+            }
+        ],
+        "correctAnswers": [ 3, 0, 1 ]
+    }
+]
