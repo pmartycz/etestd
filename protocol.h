@@ -1,75 +1,40 @@
 #include <stdio.h>
 
-typedef enum {
-    auth_level_unauthorized,
-    auth_level_student,
-    auth_level_examinator,
-    auth_level_administrator
-} auth_level;
-
-typedef enum {
-    reply_type_ok,
-    reply_type_err
-} reply_type;
-
-struct arg_required_auth_level {
-        const char *name;
-        auth_level required_auth_level;
+enum auth_level {
+    AUTH_LEVEL_UNAUTHORIZED =   0x1,
+    AUTH_LEVEL_STUDENT =        0x2,
+    AUTH_LEVEL_EXAMINATOR =     0x4,
+    AUTH_LEVEL_ADMINISTRATOR =  0x8
 };
 
-static const struct {
-    const char *method;
-    struct arg_required_auth_level *args;
-} auth_table[] = {
-    {
-        "USER",
-        (struct arg_required_auth_level[]) {
-            {"", auth_level_unauthorized}, /* no arg */
-            {NULL, 0}
-        }
-    },
-    {
-        "GET",
-        (struct arg_required_auth_level[]) {
-            {"TESTS", auth_level_student},
-            {"TEST", auth_level_student},
-            {"USERS", auth_level_student},
-            {"GROUPS", auth_level_examinator},
-            {NULL, 0}
-        }
-    },
-    {
-        "PUT",
-        (struct arg_required_auth_level[]) {
-            {"ANSWERS", auth_level_student},
-            {"TEST", auth_level_examinator},
-            {"USER", auth_level_administrator},
-            {"GROUP", auth_level_administrator},
-            {NULL, 0}
-        }
-    },
-    {
-        "DELETE",
-        (struct arg_required_auth_level[]) {
-            {"TEST", auth_level_student},
-            {"USER", auth_level_student},
-            {"GROUP", auth_level_student},
-            {NULL, 0}
-        }
-    },
-    {
-        "BYE",
-        (struct arg_required_auth_level[]) {
-            {"", auth_level_unauthorized}, /* no arg */
-            {NULL, 0}
-        }
-    },
-    {
-        NULL,
-        NULL
-    }
+/* These serve as indexes to request_required_auth_levels[]
+ * Do not change order! */
+enum request {
+    REQUEST_INVALID,
+    REQUEST_USER,
+    REQUEST_GET_TEST,
+    REQUEST_GET_TESTS,
+    REQUEST_GET_USERS,
+    REQUEST_GET_GROUPS,
+    REQUEST_PUT_ANSWERS,
+    REQUEST_PUT_TEST,
+    REQUEST_PUT_USER,
+    REQUEST_PUT_GROUP,
+    REQUEST_DELETE_TEST,
+    REQUEST_DELETE_USER,
+    REQUEST_DELETE_GROUP,
+    REQUEST_BYE
 };
 
-int send_reply(FILE *stream, reply_type type, const char *msg_fmt, ...);
-/* check_auth(const char *method, const char *arg, );
- * check_auth(method_type method, method_argument_type arg, auth_level_type al); */
+enum reply {
+    REPLY_OK,
+    REPLY_ERR
+};
+
+int has_required_auth_level(int request_type, int client_auth_level);
+
+int send_reply_ok(FILE *stream, const char *format, ...);
+
+int send_reply_err(FILE *stream, const char *format, ...);
+
+int parse_request(char *request_line);

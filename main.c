@@ -18,6 +18,8 @@
 #define DEFAULT_PORT "50000"
 #define VERSION "0.1"
 
+#define LINE_MAX 1024
+
 static const char *db_dir = DEFAULT_DB_DIR;
 static const char *port = DEFAULT_PORT;
 
@@ -79,7 +81,7 @@ int read_file(const char *filename, char **ptr)
     return 0;
 }
 
-static void print_addrinfo(struct addrinfo *ai)
+static __attribute__ ((unused)) void print_addrinfo(struct addrinfo *ai)
 {
     int res;
     char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
@@ -124,8 +126,10 @@ static int create_listening_socket(const char *port)
     hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_V4MAPPED;
 
     int ret = getaddrinfo(NULL, port, &hints, &result);
-    if (ret != 0)
-        log_msg_die("getaddrinfo: %s\n", gai_strerror(ret));
+    if (ret != 0) {
+        log_msg("getaddrinfo: %s\n", gai_strerror(ret));
+        return -1;
+    }
 
     int sfd;
     for (rp = result; rp != NULL; rp = rp->ai_next) {
@@ -150,12 +154,12 @@ static int create_listening_socket(const char *port)
     
     if (rp != NULL) {
         if (listen(sfd, SOMAXCONN) == -1)
-            perror("listen");
+            log_errno("listen");
         else
             return sfd; /* Success */
     }
-    
-    exit(EXIT_FAILURE);
+
+    return -1;
 }
 
 static int accept_connection(int listen_fd)
@@ -282,10 +286,10 @@ int main(int argc, char *argv[])
     printf("json_object_put(tests) returned %i\n", ret);
 
     return 0; */
-
+    
     int listen_fd = create_listening_socket(port);
-    /* if (listen_fd == -1)
-        log_msg_die("Could not create listening socket on port %s\n", port); */
+    if (listen_fd == -1)
+        log_msg_die("Could not create listening socket on port %s\n", port);
 
     for (;;) {
         int peer_fd = accept_connection(listen_fd);
@@ -298,11 +302,25 @@ int main(int argc, char *argv[])
             close(peer_fd);
             continue;
         }
+        setlinebuf(peer_stream);
 
-        auth_level peer_auth_level = auth_level_unauthorized;
+        int current_auth_level = AUTH_LEVEL_UNAUTHORIZED;
 
-        fprintf(peer_stream, "+OK Etestd %s\r\n", VERSION);
-        // send_reply(peer_stream, reply_type_ok, "Etestd %s", VERSION);
+        send_reply_ok(peer_stream, "Etestd %s", VERSION);
+
+        for (;;) {
+            char line[LINE_MAX];
+            fgets(line, LINE_MAX, peer_stream);
+            int request_type = parse_request(line);
+            
+            if (request_type == REQUEST_INVALID)
+                send_reply_err(peer_stream, "invalid request");
+            else if (has_required_auth_level(request_type, current_auth_level))
+                send_reply_ok(peer_stream, "");
+            else
+                send_reply_err(peer_stream, "not authorized");
+        }
+            
         fclose(peer_stream);
     }
 
