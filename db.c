@@ -49,7 +49,7 @@ int open_db(const char *db_dir)
         log_errno(groups_filename);
         goto err_groups;
     }
-        
+
     goto out;
 
 /* stack unwind cleanup */
@@ -83,59 +83,51 @@ void close_db(void)
  * Wstawia null na końcu bufora.
  * Wywołujący jest odpowiedzialny za zwolnienie pamięci.
  *
- * @warning W przypadku niepowodzenia wskaźnik *ptr nie jest
- * modyfikowany i nie należy go zwalniać.
- * 
  * @param fp plik
- * @param ptr [IN/OUT] adres wskaźnika pod którym zostanie zaalokowana pamięć
  *
- * @returns 0 w przypadku sukcesu. W przeciwnym wypadku -1.
+ * @returns Wskaźnik do utworzonego napisu lub NULL w przypdaku niepowodzenia
  */ 
-static int file_to_string(FILE *fp, char **ptr)
+static char *file_to_string(FILE *fp)
 {
     /* Go to the end of the file. */
     if (fseek(fp, 0L, SEEK_END) != 0) {
-        perror("fseek");
-        fclose(fp);
-        return -1;
+        log_errno("fseek");
+        return NULL;
     }
         
     /* Get the size of the file. */
     long bufsize = ftell(fp);
     if (bufsize == -1) {
-        perror("ftell");
-        fclose(fp);
-        return -1;
+        log_errno("ftell");
+        return NULL;
     }
 
     /* Allocate our buffer to that size. */
     char *buf = malloc(sizeof(char) * (bufsize + 1));
     if (!buf) {
-        perror("malloc");
-        fclose(fp);
-        return -1;
+        log_errno("malloc");
+        return NULL;
     }
 
     /* Go back to the start of the file. Read the entire file into memory. */
     if (fseek(fp, 0L, SEEK_SET) != 0 || fread(buf, sizeof(char), bufsize, fp) != bufsize) {
         free(buf);
-        fclose(fp);
-        return -1;
+        return NULL;
     }
     
     buf[bufsize] = '\0';
-    *ptr = buf;
-    
-    return 0;
+    return buf;
 }
 
 static json_object *get_json_from_file(FILE *fp)
 {
-    char *json_string;
-    if (file_to_string(fp, &json_string) != 0)
+    char *json_string = file_to_string(fp);
+    if (!json_string)
         return NULL;
 
     json_object *obj = json_tokener_parse(json_string);
+
+    //fprintf(stderr, "%s\n\n", json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PRETTY));
 
     free(json_string);
     
@@ -247,12 +239,13 @@ json_object *get_test_headers(json_object *tests)
 }
 
 /* allocates memory! */
-json_object *get_tests_for_examiner(const char *username, json_object *tests)
+json_object *get_tests_for_examiner(const char *username)
 {
+    json_object *tests = get_tests();
     if (!json_object_is_type(tests, json_type_array))
         return NULL;
 
-    json_object *new_tests = json_object_new_array();
+    json_object *examiner_tests = json_object_new_array();
 
     for (int i = 0; i < json_object_array_length(tests); i++) {
         json_object *test = json_object_array_get_idx(tests, i);
@@ -261,22 +254,25 @@ json_object *get_tests_for_examiner(const char *username, json_object *tests)
             if (!json_object_is_type(owner, json_type_string))
                 return NULL;
             if (strcmp(json_object_get_string(owner), username) == 0)
-                json_object_array_add(new_tests, test);
+                json_object_array_add(examiner_tests, json_object_get(test));
         }
         
     }
+
+    json_object_put(tests);
     
-    return new_tests;
+    return examiner_tests;
 }
 
 /* allocates memory! */
-json_object *get_tests_for_student(const char *username, json_object *tests)
+json_object *get_tests_for_student(const char *username)
 {
+    json_object *tests = get_tests();
     if (!json_object_is_type(tests, json_type_array))
         return NULL;
 
-    json_object *new_tests = json_object_new_array();
     json_object *groups = get_groups();
+    json_object *student_tests = json_object_new_array();
 
     for (int i = 0; i < json_object_array_length(tests); i++) {
         json_object *test = json_object_array_get_idx(tests, i);
@@ -288,13 +284,16 @@ json_object *get_tests_for_student(const char *username, json_object *tests)
                 json_object *test_group = json_object_array_get_idx(test_groups, i);
                 if (!json_object_is_type(test_group, json_type_string))
                     return NULL;
-                if (user_is_group_member(username, json_object_get_string(test_group), groups))
-                    json_object_array_add(new_tests, test);
+                if (user_is_group_member(username, json_object_get_string(test_group), groups)) {
+                    json_object_array_add(student_tests, json_object_get(test));
+                    break;
+                }
             }
         }
     }
 
     json_object_put(groups);
+    json_object_put(tests);
     
-    return new_tests;
+    return student_tests;
 }

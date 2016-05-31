@@ -8,46 +8,9 @@
 #include "protocol.h"
 #include "db.h"
 
-int is_valid_request(int n)
+int has_required_auth_level(int required_auth_level, int peer_auth_level)
 {
-    return (n >= 0) && (n <= REQUEST_BYE);
-}
-
-static int request_required_auth_levels[] = {
-    /* REQUEST_USER */          AUTH_LEVEL_UNAUTHORIZED,
-
-    /* Student can only fetch tests available to him,
-     * Examiner can only fetch tests he owns */
-      
-    /* REQUEST_GET_TEST */      AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER,
-    /* REQUEST_GET_TESTS */     AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER,
-
-    /* Student can only fetch users in examiners group */
-    
-    /* REQUEST_GET_USERS */     AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR,
-    /* REQUEST_GET_GROUPS */    AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR,
-
-    /* Student submits answers for tests available to him,
-     * subject to time restrictions */
-     
-    /* REQUEST_PUT_ANSWERS */   AUTH_LEVEL_STUDENT,
-    
-    /* REQUEST_PUT_TEST */      AUTH_LEVEL_EXAMINER,
-    /* REQUEST_PUT_USER */      AUTH_LEVEL_ADMINISTRATOR,
-    /* REQUEST_PUT_GROUP */     AUTH_LEVEL_ADMINISTRATOR,
-    
-    /* Examiner can only delete test he owns, administrator can delete any test */
-    
-    /* REQUEST_DELETE_TEST */   AUTH_LEVEL_EXAMINER,
-    /* REQUEST_DELETE_USER */   AUTH_LEVEL_ADMINISTRATOR,
-    /* REQUEST_DELETE_GROUP */  AUTH_LEVEL_ADMINISTRATOR,
-    /* REQUEST_BYE */           AUTH_LEVEL_UNAUTHORIZED | AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR
-};
-
-int has_required_auth_level(int request_type, int client_auth_level)
-{
-    assert(is_valid_request(request_type));    
-    return request_required_auth_levels[request_type] & client_auth_level;
+    return required_auth_level & peer_auth_level;
 }
 
 static int send_reply(FILE *stream, int reply_type, const char *format, va_list ap)
@@ -94,78 +57,91 @@ int send_reply_err(FILE *stream, const char *format, ...)
     return ret;
 }
 
-static const struct method_map {
-    const char *name;
-    int value;
-} method_map[] = {
-    {   "USER", REQUEST_USER    },
-    {   "BYE",  REQUEST_BYE     },
-    {   NULL,   0               }
+struct request_info {
+    int code;
+    int required_auth_level;
 };
 
-static const struct method_map_with_arg {
+static const struct method_map {
     const char *method;
-    const struct method_map *mappings;
-} method_map_with_arg[] = {
+    const char *const *args;
+    const struct request_info *ri;
+} method_map[] = {
+    {
+        "USER",
+        NULL,
+        (struct request_info []) {
+            { REQUEST_USER,         AUTH_LEVEL_UNAUTHORIZED }
+        }
+    },
     {
         "GET",
-        (struct method_map []) {
-            {   "TEST",     REQUEST_GET_TEST        },
-            {   "TESTS",    REQUEST_GET_TESTS       },
-            {   "USERS",    REQUEST_GET_USERS       },
-            {   "GROUPS",   REQUEST_GET_GROUPS      },
-            {   NULL,       0                       }
+        (const char *[]) { "TEST", "TESTS", "USERS", "GROUPS", NULL },
+        (struct request_info []) {
+            { REQUEST_GET_TEST,     AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER },
+            { REQUEST_GET_TESTS,    AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER },
+            { REQUEST_GET_USERS,    AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR },
+            { REQUEST_GET_GROUPS,   AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR }
         }
     },
     {
         "PUT",
-        (struct method_map []) {
-            {   "ANSWERS",  REQUEST_PUT_ANSWERS     },
-            {   "TEST",     REQUEST_PUT_TEST        },
-            {   "USER",     REQUEST_PUT_USER        },
-            {   "GROUP",    REQUEST_PUT_GROUP       },
-            {   NULL,       0                       }
+        (const char *[]) { "ANSWERS", "TEST", "USER", "GROUP", NULL }, /* {TEST|USER|GROUP}S ? */
+        (struct request_info []) {
+            { REQUEST_PUT_ANSWERS,  AUTH_LEVEL_STUDENT },
+            { REQUEST_PUT_TEST,     AUTH_LEVEL_EXAMINER },
+            { REQUEST_PUT_USER,     AUTH_LEVEL_ADMINISTRATOR },
+            { REQUEST_PUT_GROUP,    AUTH_LEVEL_ADMINISTRATOR }
         }
     },
     {
         "DELETE",
-        (struct method_map []) {
-            {   "TEST",     REQUEST_DELETE_TEST     },
-            {   "USER",     REQUEST_DELETE_USER     },
-            {   "GROUP",    REQUEST_DELETE_GROUP    },
-            {   NULL,       0                       }
+        (const char *[]) { "TEST", "USER", "GROUP", NULL }, /* {TEST|USER|GROUP}S ? */
+        (struct request_info []) {
+            { REQUEST_DELETE_TEST,  AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR },
+            { REQUEST_DELETE_USER,  AUTH_LEVEL_ADMINISTRATOR },
+            { REQUEST_DELETE_GROUP, AUTH_LEVEL_ADMINISTRATOR }
         }
     },
     {
+        "BYE",
+        NULL,
+        (struct request_info []) {
+            { REQUEST_BYE,          AUTH_LEVEL_UNAUTHORIZED | AUTH_LEVEL_STUDENT | \
+                AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR }
+        }
+    },
+    {
+        NULL,
         NULL,
         NULL
     }
 };
 
 /* @warning Modifies request_line */
-static int parse_request(char *request_line, char **line_ptr)
+static const struct request_info *parse_request(char *request_line, char **line_ptr)
 {
     char *first_token = strtok_r(request_line, " \r\n", line_ptr);
     if (!first_token) /* empty request, etc */
-        return -1;
+        return NULL;
 
     /* method without arg */
-    for (const struct method_map *mapping = method_map; mapping->name; mapping++)
-        if (strcasecmp(first_token, mapping->name) == 0)
-            return mapping->value;
+    for (const struct method_map *m = method_map; m->method != NULL; m++)
+        if (m->args == NULL && strcasecmp(first_token, m->method) == 0)
+            return m->ri;
             
     char *second_token = strtok_r(NULL, " \r\n", line_ptr);
     if (!second_token)
-        return -1;
+        return NULL;
     
     /* method with arg */
-    for (const struct method_map_with_arg *t = method_map_with_arg; t->method; t++)
-        if (strcasecmp(first_token, t->method) == 0)
-            for (const struct method_map *mapping = t->mappings; mapping->name; mapping++)
-                if (strcasecmp(second_token, mapping->name) == 0)
-                    return mapping->value;
+    for (const struct method_map *m = method_map; m->method != NULL; m++)
+        if (m->args != NULL && strcasecmp(first_token, m->method) == 0)
+            for (size_t i = 0; m->args[i] != NULL; i++)
+                if (strcasecmp(second_token, m->args[i]) == 0)
+                    return &m->ri[i];
     
-    return -1;
+    return NULL;
 }
 
 int auth(const char *username, struct credentials *peer_creds)
@@ -221,18 +197,18 @@ int handle_request(char *request_line, FILE *peer_stream, struct credentials *pe
 {
     char *line_ptr;
     
-    int request_type = parse_request(request_line, &line_ptr);
-    if (request_type < 0) {
+    const struct request_info *req_info = parse_request(request_line, &line_ptr);
+    if (!req_info) {
         send_reply_err(peer_stream, "invalid request");
         return -1;
     }
         
-    if (!has_required_auth_level(request_type, peer_creds->auth_level)) {
+    if (!has_required_auth_level(req_info->required_auth_level, peer_creds->auth_level)) {
         send_reply_err(peer_stream, "not authorized");
         return -1;
     }
     
-    switch (request_type) {
+    switch (req_info->code) {
         case REQUEST_USER: {
             char *username = strtok_r(NULL, " \r\n", &line_ptr);
             if (!username) {
@@ -250,15 +226,14 @@ int handle_request(char *request_line, FILE *peer_stream, struct credentials *pe
         }
         
         case REQUEST_GET_TESTS: {
-            json_object *tests = get_tests();
             json_object *user_tests;
             
             switch (peer_creds->auth_level) {
                 case AUTH_LEVEL_EXAMINER:
-                    user_tests = get_tests_for_examiner(peer_creds->username, tests);
+                    user_tests = get_tests_for_examiner(peer_creds->username);
                     break;
                 case AUTH_LEVEL_STUDENT: {
-                    user_tests = get_tests_for_student(peer_creds->username, tests);
+                    user_tests = get_tests_for_student(peer_creds->username);
                     break;
                 }
                 default:
@@ -271,7 +246,6 @@ int handle_request(char *request_line, FILE *peer_stream, struct credentials *pe
             fputs(json_object_to_json_string_ext(headers, JSON_C_TO_STRING_PLAIN), peer_stream);
             fputs("\r\n.\r\n", peer_stream);
             
-            json_object_put(tests);
             json_object_put(user_tests);
             break;
         }

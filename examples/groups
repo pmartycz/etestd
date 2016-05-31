@@ -18,21 +18,21 @@
         "name": "io",
         "fullName": "Inżynieria oprogramowania",
         "members": [
-            "jan", "janina"
+            "janina"
         ]
     },
     {
         "name": "sk",
         "fullName": "Sieci komputerowe",
         "members": [
-            "jan"
+            "janina"
         ]
     },
     {
         "name": "bd",
         "fullName": "Bazy danych",
         "members": [
-            "janina"
+            "janina", "jan"
         ]
     }
 ]

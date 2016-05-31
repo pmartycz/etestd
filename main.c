@@ -185,23 +185,6 @@ int main(int argc, char *argv[])
 
     if (open_db(db_dir) != 0)
         log_msg_die("Error opening database %s\n", db_dir);
-
-    /* struct json_object *tests = json_object_from_file(tests_filename);
-    if (write_test_headers(tests, stdout) != 0)
-        puts("err");
-    puts("\n");
-
-    struct json_object *test;
-    uuid_t id;
-    uuid_parse("6fc51d84-b28b-4390-9c09-74ec4107ed00", id);
-    test = get_test(id, tests);
-    if (test)
-        puts(json_object_to_json_string(test));
-    
-    int ret = json_object_put(tests);
-    printf("json_object_put(tests) returned %i\n", ret);
-
-    return 0; */
     
     int listen_fd = create_listening_socket(port);
     if (listen_fd == -1)
