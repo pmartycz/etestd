@@ -1,0 +1,22 @@
+[
+    {
+        "name": "piotr",
+        "fullName": "Piotr Nowak",
+        "passwordHash": "6bf1a429c2fb03b3c85be48ba16387bc"
+    },
+    {
+        "name": "anna",
+        "fullName": "Anna Nowak",
+        "passwordHash": "97e1912b3561f689f44793471e3fab21"
+    },
+    {
+        "name": "jan",
+        "fullName": "Jan Kowalski",
+        "passwordHash": "b111e7500ecbf0d9a2907339cec01467"
+    },
+    {
+        "name": "janina",
+        "fullName": "Janina Kowalska",
+        "passwordHash": "920c99f3649be77feb71bc8c51c9d90d"
+    }
+]

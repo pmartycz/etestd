@@ -1,16 +1,15 @@
 #include <stdio.h>
 
-enum auth_level {
+enum {
     AUTH_LEVEL_UNAUTHORIZED =   0x1,
     AUTH_LEVEL_STUDENT =        0x2,
-    AUTH_LEVEL_EXAMINATOR =     0x4,
+    AUTH_LEVEL_EXAMINER =       0x4,
     AUTH_LEVEL_ADMINISTRATOR =  0x8
 };
 
 /* These serve as indexes to request_required_auth_levels[]
  * Do not change order! */
-enum request {
-    REQUEST_INVALID,
+enum {
     REQUEST_USER,
     REQUEST_GET_TEST,
     REQUEST_GET_TESTS,
@@ -23,18 +22,21 @@ enum request {
     REQUEST_DELETE_TEST,
     REQUEST_DELETE_USER,
     REQUEST_DELETE_GROUP,
-    REQUEST_BYE
+    REQUEST_BYE /* This one must be last */
 };
 
-enum reply {
+enum {
     REPLY_OK,
     REPLY_ERR
 };
 
-int has_required_auth_level(int request_type, int client_auth_level);
+struct credentials {
+    char *username;
+    int auth_level;
+};
 
 int send_reply_ok(FILE *stream, const char *format, ...);
 
 int send_reply_err(FILE *stream, const char *format, ...);
 
-int parse_request(char *request_line);
+int handle_request(char *request_line, FILE *peer_stream, struct credentials *peer_creds);

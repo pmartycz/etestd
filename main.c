@@ -14,7 +14,7 @@
 #include "db.h"
 #include "protocol.h"
 
-#define DEFAULT_DB_DIR "examples" /* change to /var/lib/etest (/srv/etest ?) later */
+#define DEFAULT_DB_DIR "./examples" /* change later */
 #define DEFAULT_PORT "50000"
 #define VERSION "0.1"
 
@@ -22,64 +22,6 @@
 
 static const char *db_dir = DEFAULT_DB_DIR;
 static const char *port = DEFAULT_PORT;
-
-/**
- * Wczytuje plik do dynamicznie alokowanego bufora.
- * Wywołujący jest odpowiedzialny za zwolnienie pamięci.
- *
- * @warning W przypadku niepowodzenia wskaźnik *ptr nie jest
- * modyfikowany i nie należy go zwalniać.
- * 
- * @param filename nazwa pliku
- * @param ptr [IN/OUT] adres wskaźnika pod którym zostanie zaalokowana pamięć
- *
- * @returns 0 w przypadku sukcesu. W przeciwnym wypadku -1.
- */ 
-int read_file(const char *filename, char **ptr)
-{
-    FILE *fp = fopen(filename, "r");
-    
-    if (fp == NULL) {
-        perror("fopen");
-        return -1;
-    }
-    
-    /* Go to the end of the file. */
-    if (fseek(fp, 0L, SEEK_END) != 0) {
-        perror("fseek");
-        fclose(fp);
-        return -1;
-    }
-        
-    /* Get the size of the file. */
-    long bufsize = ftell(fp);
-    if (bufsize == -1) {
-        perror("ftell");
-        fclose(fp);
-        return -1;
-    }
-
-    /* Allocate our buffer to that size. */
-    char *buf = malloc(sizeof(char) * (bufsize + 1));
-    if (!buf) {
-        perror("malloc");
-        fclose(fp);
-        return -1;
-    }
-
-    /* Go back to the start of the file. Read the entire file into memory. */
-    if (fseek(fp, 0L, SEEK_SET) != 0 || fread(buf, sizeof(char), bufsize, fp) != bufsize) {
-        free(buf);
-        fclose(fp);
-        return -1;
-    }
-    
-    buf[bufsize] = '\0';
-    *ptr = buf;
-    fclose(fp);
-    
-    return 0;
-}
 
 static __attribute__ ((unused)) void print_addrinfo(struct addrinfo *ai)
 {
@@ -240,35 +182,9 @@ static void parse_args(int argc, char* argv[])
 int main(int argc, char *argv[])
 {
     parse_args(argc, argv);
-    
-    char *tests_filename, *answers_filename,
-         *users_filename, *groups_filename;
-         
-    asprintf(&tests_filename, "%s/%s", db_dir, "tests");
-    asprintf(&answers_filename, "%s/%s", db_dir, "answers");
-    asprintf(&users_filename, "%s/%s", db_dir, "users");
-    asprintf(&groups_filename, "%s/%s", db_dir, "groups");
 
-    /* char *tests_json_string;
-    if (read_file(TESTS_FILE, &tests_json_string) != 0) {
-        fprintf(stderr, "Error reading tests file %s\n", TESTS_FILE);
-        exit(EXIT_FAILURE);
-    }
-
-    json_object *jobj = json_tokener_parse(tests_json_string);
-    puts(json_object_to_json_string(jobj));
-    printf("json_object_put(jobj) returned %i\n", json_object_put(jobj));
-
-    free(tests_json_string); */
-
-    /* struct json_object_iterator it = json_object_iter_begin(test);
-    struct json_object_iterator it_end = json_object_iter_end(json_object_array_get_idx(test));
-
-    while (!json_object_iter_equal(&it, &it_end)) {
-        printf("key: %s value: %s\n", json_object_iter_peek_name(&it),
-            json_object_to_json_string(json_object_iter_peek_value(&it)));
-        json_object_iter_next(&it);
-    } */
+    if (open_db(db_dir) != 0)
+        log_msg_die("Error opening database %s\n", db_dir);
 
     /* struct json_object *tests = json_object_from_file(tests_filename);
     if (write_test_headers(tests, stdout) != 0)
@@ -304,31 +220,22 @@ int main(int argc, char *argv[])
         }
         setlinebuf(peer_stream);
 
-        int current_auth_level = AUTH_LEVEL_UNAUTHORIZED;
-
         send_reply_ok(peer_stream, "Etestd %s", VERSION);
+        struct credentials peer_creds = { NULL, AUTH_LEVEL_UNAUTHORIZED };
 
         for (;;) {
             char line[LINE_MAX];
             fgets(line, LINE_MAX, peer_stream);
-            int request_type = parse_request(line);
-            
-            if (request_type == REQUEST_INVALID)
-                send_reply_err(peer_stream, "invalid request");
-            else if (has_required_auth_level(request_type, current_auth_level))
-                send_reply_ok(peer_stream, "");
-            else
-                send_reply_err(peer_stream, "not authorized");
+            if (handle_request(line, peer_stream, &peer_creds) != 0)
+                break;
         }
-            
+
+        free(peer_creds.username);
         fclose(peer_stream);
     }
 
+    close_db();
     close(listen_fd);
-    free(tests_filename);
-    free(answers_filename);
-    free(users_filename);
-    free(groups_filename);
     
     return 0;
 }
