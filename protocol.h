@@ -39,4 +39,4 @@ int send_reply_ok(FILE *stream, const char *format, ...);
 
 int send_reply_err(FILE *stream, const char *format, ...);
 
-int handle_request(char *request_line, FILE *peer_stream, struct credentials *peer_creds);
+int handle_request(char *request_line, struct credentials *peer_creds, FILE *peer_stream);

@@ -209,7 +209,7 @@ int main(int argc, char *argv[])
         for (;;) {
             char line[LINE_MAX];
             fgets(line, LINE_MAX, peer_stream);
-            if (handle_request(line, peer_stream, &peer_creds) != 0)
+            if (handle_request(line, &peer_creds, peer_stream) != 0)
                 break;
         }
 

@@ -8,6 +8,8 @@
 #include "protocol.h"
 #include "db.h"
 
+#define JSON_FLAGS JSON_C_TO_STRING_PLAIN
+
 int has_required_auth_level(int required_auth_level, int peer_auth_level)
 {
     return required_auth_level & peer_auth_level;
@@ -55,6 +57,17 @@ int send_reply_err(FILE *stream, const char *format, ...)
     va_end(ap);
 
     return ret;
+}
+
+int send_data(FILE *stream, const char *string)
+{
+    fputs(string, stream);
+    //fputs("\r\n.\r\n", stream);
+    fputs("\r\n", stream);
+    
+    if (ferror(stream))
+        return -EIO;
+    return 0;
 }
 
 struct request_info {
@@ -193,7 +206,149 @@ static const char *auth_level_to_string(int auth_level)
     
 }
 
-int handle_request(char *request_line, FILE *peer_stream, struct credentials *peer_creds)
+json_object *get_tests_for_user(const struct credentials *peer_creds)
+{
+    switch (peer_creds->auth_level) {
+        case AUTH_LEVEL_ADMINISTRATOR:
+            return get_tests();
+        case AUTH_LEVEL_EXAMINER:
+            return get_tests_for_examiner(peer_creds->username);
+        case AUTH_LEVEL_STUDENT:
+            return get_tests_for_student(peer_creds->username);
+        default:
+            abort();
+    }
+}
+
+json_object *get_test_for_user(uuid_t id, const struct credentials *peer_creds, json_object *tests)
+{
+    switch (peer_creds->auth_level) {
+        case AUTH_LEVEL_ADMINISTRATOR:
+        case AUTH_LEVEL_EXAMINER:
+            return get_test(id, tests);
+        case AUTH_LEVEL_STUDENT:
+            return get_test_for_student(id, peer_creds->username, tests);
+        default:
+            abort();
+    }
+}
+
+int handle_request_get_tests(const struct credentials *peer_creds, FILE *peer_stream)
+{
+    json_object *tests = get_tests_for_user(peer_creds); 
+    
+    remove_qa_from_tests(tests);
+    
+    send_reply_ok(peer_stream, "");
+    send_data(peer_stream, json_object_to_json_string_ext(tests, JSON_FLAGS));
+    
+    json_object_put(tests);
+    return 0;
+}
+
+int handle_request_get_test(uuid_t id, const struct credentials *peer_creds, FILE *peer_stream)
+{
+    int ret = 0;
+    json_object *tests = get_tests_for_user(peer_creds);
+    json_object *test = get_test_for_user(id, peer_creds, tests);
+
+    if (test) {
+        send_reply_ok(peer_stream, "");
+        send_data(peer_stream, json_object_to_json_string_ext(test, JSON_FLAGS));
+    } else {
+        send_reply_err(peer_stream, "not available");
+        ret = -1;
+    }
+
+    json_object_put(tests);
+    return ret;
+}
+
+int handle_request_get_users(const struct credentials *peer_creds, FILE *peer_stream)
+{
+    json_object *users = NULL;
+    
+    switch (peer_creds->auth_level) {
+        case AUTH_LEVEL_ADMINISTRATOR:
+        case AUTH_LEVEL_EXAMINER:
+        case AUTH_LEVEL_STUDENT:
+            /* TODO students should not receive all users */
+            users = get_users();
+            break;
+        default:
+            abort();
+    }
+
+    /* Remove password hashes */
+    if (json_object_is_type(users, json_type_array))
+        for (int i = 0; i < json_object_array_length(users); i++) {
+            json_object *user = json_object_array_get_idx(users, i);
+            if (json_object_is_type(user, json_type_object))
+                json_object_object_del(user, "passwordHash");
+        }
+
+    send_reply_ok(peer_stream, "");
+    send_data(peer_stream, json_object_to_json_string_ext(users, JSON_FLAGS));
+
+    json_object_put(users);
+    return 0;
+    
+}
+
+int handle_request_get_groups(const struct credentials *peer_creds, FILE *peer_stream)
+{
+    json_object *groups = NULL;
+
+    switch (peer_creds->auth_level) {
+        case AUTH_LEVEL_ADMINISTRATOR:
+        case AUTH_LEVEL_EXAMINER:
+            groups = get_groups();
+            break;
+        default:
+            abort();
+    }
+
+    send_reply_ok(peer_stream, "");
+    send_data(peer_stream, json_object_to_json_string_ext(groups, JSON_FLAGS));
+
+    json_object_put(groups);
+    return 0;
+}
+
+int handle_request_put_answers(uuid_t id, const struct credentials *peer_creds, FILE *peer_stream)
+{
+    send_reply_ok(peer_stream, "go ahead, send me your answers");
+    
+    char line[1024];
+    json_object *answers = NULL;
+    json_tokener *tok = json_tokener_new();
+    enum json_tokener_error jerr;
+    
+    do {
+        if (fgets(line, sizeof(line), peer_stream) == NULL)
+            break;
+        answers = json_tokener_parse_ex(tok, line, -1);
+    } while ((jerr = json_tokener_get_error(tok)) == json_tokener_continue);
+    
+    json_tokener_free(tok);
+    
+    if (jerr != json_tokener_success) {
+        send_reply_err(peer_stream, "input error");
+        json_object_put(answers);
+        return -1;
+    }
+
+    if (submit_answers(id, peer_creds->username, answers) != 0) {
+        send_reply_err(peer_stream, "submit error");
+        json_object_put(answers);
+        return -1;
+    }
+
+    send_reply_ok(peer_stream, "answers added");
+    return 0;
+}
+
+int handle_request(char *request_line, struct credentials *peer_creds, FILE *peer_stream)
 {
     char *line_ptr;
     
@@ -209,8 +364,9 @@ int handle_request(char *request_line, FILE *peer_stream, struct credentials *pe
     }
     
     switch (req_info->code) {
-        case REQUEST_USER: {
-            char *username = strtok_r(NULL, " \r\n", &line_ptr);
+        case REQUEST_USER:
+        {
+            const char *username = strtok_r(NULL, " \r\n", &line_ptr);
             if (!username) {
                 send_reply_err(peer_stream, "invalid request");
                 return -1;
@@ -225,35 +381,39 @@ int handle_request(char *request_line, FILE *peer_stream, struct credentials *pe
             break;
         }
         
-        case REQUEST_GET_TESTS: {
-            json_object *user_tests;
-            
-            switch (peer_creds->auth_level) {
-                case AUTH_LEVEL_EXAMINER:
-                    user_tests = get_tests_for_examiner(peer_creds->username);
-                    break;
-                case AUTH_LEVEL_STUDENT: {
-                    user_tests = get_tests_for_student(peer_creds->username);
-                    break;
-                }
-                default:
-                    abort();
-            }
-
-            json_object *headers = get_test_headers(user_tests);
-            
-            send_reply_ok(peer_stream, "");
-            fputs(json_object_to_json_string_ext(headers, JSON_C_TO_STRING_PLAIN), peer_stream);
-            fputs("\r\n.\r\n", peer_stream);
-            
-            json_object_put(user_tests);
-            break;
-        }
-
+        case REQUEST_GET_TESTS:
+            return handle_request_get_tests(peer_creds, peer_stream);
+        
         case REQUEST_GET_TEST:
+        {
+            const char *id_string = strtok_r(NULL, " \r\n", &line_ptr);
+            uuid_t id;
+            if (!id_string || uuid_parse(id_string, id) != 0) {
+                send_reply_err(peer_stream, "invalid request");
+                return -1;
+            }
+            
+            return handle_request_get_test(id, peer_creds, peer_stream);
+        }
+        
         case REQUEST_GET_USERS:
+            return handle_request_get_users(peer_creds, peer_stream);
+            
         case REQUEST_GET_GROUPS:
+            return handle_request_get_groups(peer_creds, peer_stream);
+        
         case REQUEST_PUT_ANSWERS:
+        {
+            const char *id_string = strtok_r(NULL, " \r\n", &line_ptr);
+            uuid_t id;
+            if (!id_string || uuid_parse(id_string, id) != 0) {
+                send_reply_err(peer_stream, "invalid request");
+                return -1;
+            }
+            
+            return handle_request_put_answers(id, peer_creds, peer_stream);
+        }
+        
         case REQUEST_PUT_TEST:
         case REQUEST_PUT_USER:
         case REQUEST_PUT_GROUP:
