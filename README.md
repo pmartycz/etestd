@@ -13,3 +13,9 @@ Dependencies:
 apt-get install build-essential libjson-c-dev uuid-dev  
 make
 ```
+
+#### Building on Fedora
+```sh
+yum install gcc make json-c-devel libuuid-devel  
+make
+```
