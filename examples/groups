@@ -1,38 +1,39 @@
 [
-    /* administrators and examiners are special groups */
-    {
-        "name": "administrators",
-        "fullName": "Administratorzy systemu",
-        "members": [
-            "piotr"
-        ]
-    },
-    {
-        "name": "examiners",
-        "fullName": "Egzaminatorzy",
-        "members": [
-            "anna"
-        ]
-    },
-    {
-        "name": "io",
-        "fullName": "Inżynieria oprogramowania",
-        "members": [
-            "janina"
-        ]
-    },
-    {
-        "name": "sk",
-        "fullName": "Sieci komputerowe",
-        "members": [
-            "janina", "jan"
-        ]
-    },
-    {
-        "name": "bd",
-        "fullName": "Bazy danych",
-        "members": [
-            "janina", "jan"
-        ]
-    }
-]
+   {
+     "name": "administrators",
+     "fullName": "Administratorzy systemu",
+     "members": [
+       "piotr"
+     ]
+   },
+   {
+     "name": "examiners",
+     "fullName": "Egzaminatorzy",
+     "members": [
+       "anna"
+     ]
+   },
+   {
+     "name": "io",
+     "fullName": "Inżynieria oprogramowania",
+     "members": [
+       "janina"
+     ]
+   },
+   {
+     "name": "sk",
+     "fullName": "Sieci komputerowe",
+     "members": [
+       "janina",
+       "jan"
+     ]
+   },
+   {
+     "name": "bd",
+     "fullName": "Bazy danych",
+     "members": [
+       "janina",
+       "jan"
+     ]
+   }
+ ]

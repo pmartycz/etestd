@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <json-c/json.h>
 #include <uuid/uuid.h>
+#include <stdbool.h>
 
 #include "common.h"
 #include "db.h"
@@ -158,11 +159,24 @@ static void put_json_to_file(json_object *obj, FILE *fp)
     fputs(json_object_to_json_string_ext(obj, JSON_FLAGS), fp);
     fflush(fp);
     ftruncate(fileno(fp), ftello(fp));
+
+    if (ferror(fp))
+        log_msg_die("Database write error");
 }
 
 void put_answers(json_object *answers)
 {
     put_json_to_file(answers, answers_file);
+}
+
+void put_tests(json_object *tests)
+{
+    put_json_to_file(tests, tests_file);
+}
+
+void put_groups(json_object *groups)
+{
+    put_json_to_file(groups, groups_file);
 }
 
 static int key_value_equals_str(json_object *obj, const char *key, const char *str)
@@ -264,7 +278,7 @@ static json_object *get_user_answers_record(uuid_t test_id, const char *username
     return NULL;
 }
 
-static json_object *create_user_answers_record(uuid_t test_id, const char *username, json_object *answers)
+static int64_t create_user_answers_record(uuid_t test_id, const char *username, json_object *answers)
 {
     json_object *test_record = get_test_answers_record(test_id, answers);
 
@@ -273,19 +287,20 @@ static json_object *create_user_answers_record(uuid_t test_id, const char *usern
 
     json_object *test_subjects;
     if (json_object_object_get_ex(test_record, "subjects", &test_subjects) != TRUE)
-        return NULL;
+        return 0;
 
     if (!json_object_is_type(test_subjects, json_type_array))
-        return NULL;
+        return 0;
 
     json_object *user_record = json_object_new_object();
     json_object_object_add(user_record, "name", json_object_new_string(username));
     json_object_object_add(user_record, "answers", NULL);
-    json_object_object_add(user_record, "creationTime", json_object_new_int64(time(NULL)));
+    int64_t now = time(NULL);
+    json_object_object_add(user_record, "creationTime", json_object_new_int64(now));
 
     json_object_array_add(test_subjects, user_record);
 
-    return user_record;
+    return now;
 }
 
 json_object *get_test_for_student(uuid_t id, const char *username, json_object *tests)
@@ -295,44 +310,58 @@ json_object *get_test_for_student(uuid_t id, const char *username, json_object *
     if (!json_object_is_type(test, json_type_object))
         return NULL;
     
-    /* If test isn't available yet return nothing */
     json_object *start_time;
-    if (json_object_object_get_ex(test, "startTime", &start_time) == TRUE) {
-        int64_t now = time(NULL);
-        if (json_object_is_type(start_time, json_type_int))
-            if (json_object_get_int64(start_time) > now)
-                return NULL;
-    }
+    json_object *end_time;
+    json_object *results_available;
+
+    if (json_object_object_get_ex(test, "startTime", &start_time) != TRUE ||
+        !json_object_is_type(start_time, json_type_int) ||
+        json_object_object_get_ex(test, "endTime", &end_time) != TRUE ||
+        !json_object_is_type(end_time, json_type_int) ||
+        json_object_object_get_ex(test, "resultsAvailable", &results_available) != TRUE ||
+        !json_object_is_type(results_available, json_type_boolean))
+        return NULL;
+    
+    /* If test isn't available yet return nothing */   
+    int64_t now = time(NULL);
+    if (now < json_object_get_int64(start_time))
+        return NULL;
     
     /* If results haven't been made available by examinator
      * remove correct answers */
-    json_object *results_available;
-    if (json_object_object_get_ex(test, "resultsAvailable", &results_available) == TRUE)
-        if (json_object_is_type(results_available, json_type_boolean))
-            if(json_object_get_boolean(results_available) == FALSE)
-                json_object_object_del(test, "correctAnswers");
+    if (now < json_object_get_int64(end_time) ||
+        json_object_get_boolean(results_available) != TRUE)
+        json_object_object_del(test, "correctAnswers");
 
     json_object *answers = get_answers();
     json_object *user_record = get_user_answers_record(id, username, answers);
     
-    /* If there is no answer record (student gets test for the first time)
+    /* If there is no answer record (i.e. student gets test for the first time)
      * create an empty one with current time logged */
+    int64_t user_start_time;
     if (!user_record) {
-        create_user_answers_record(id, username, answers);
+        user_start_time = create_user_answers_record(id, username, answers);
         put_answers(answers);
     /* Else if user has submitted answers add them to test */    
     } else {
         json_object *user_answers;
-        if (json_object_object_get_ex(user_record, "answers", &user_answers) == TRUE)
-            if (!json_object_is_type(user_answers, json_type_null))
+        if (json_object_object_get_ex(user_record, "answers", &user_answers) == TRUE &&
+            !json_object_is_type(user_answers, json_type_null))
                 json_object_object_add(test, "userAnswers", json_object_get(user_answers));
+                
+        json_object *creation_time;
+        if (json_object_object_get_ex(user_record, "creationTime", &creation_time) == TRUE &&
+            json_object_is_type(user_answers, json_type_int))
+                user_start_time = json_object_get_int64(creation_time);
     }
+    
+    json_object_object_add(test, "userStartTime", json_object_new_int64(user_start_time));
 
     json_object_put(answers);
     return test;
 }
 
-static json_object *get_entity(const char *name, json_object *entities)
+json_object *get_entity(const char *name, json_object *entities)
 {
     if (!json_object_is_type(entities, json_type_array))
         return NULL;
@@ -525,4 +554,190 @@ int submit_answers(uuid_t id, const char *username, json_object *submitted_answe
     json_object_put(tests);
     json_object_put(answers);
     return retval;
+}
+
+int test_is_valid(json_object *test)
+{
+    if (!json_object_is_type(test, json_type_object))
+        return 0;
+        
+    enum {
+        HAS_NAME            = (1 << 0),
+        HAS_TYPE            = (1 << 1),
+        HAS_GROUPS          = (1 << 2),
+        HAS_TIME_LIMIT      = (1 << 3),
+        HAS_START_TIME      = (1 << 4),
+        HAS_END_TIME        = (1 << 5),
+        HAS_QUESTIONS       = (1 << 6),
+        HAS_CORRECT_ANSWERS = (1 << 7)
+    };
+
+    struct json_object_iterator it = json_object_iter_begin(test);
+    struct json_object_iterator it_end = json_object_iter_end(test);
+
+    int key_flags = 0;
+    
+    while (!json_object_iter_equal(&it, &it_end)) {
+        const char *key = json_object_iter_peek_name(&it);
+        json_object *value = json_object_iter_peek_value(&it);
+
+        if (streq(key, "name")) {
+            if (!json_object_is_type(value, json_type_string))
+                return 0;
+            key_flags |= HAS_NAME;
+        } else if (streq(key, "type")) {
+            if (!json_object_is_type(value, json_type_string) ||
+                (!streq(json_object_get_string(value), "single") &&
+                !streq(json_object_get_string(value), "multi")))
+                return 0;
+            key_flags |= HAS_TYPE;
+        } else if (streq(key, "groups")) {
+            if (!json_object_is_type(value, json_type_array))
+                return 0;
+            key_flags |= HAS_GROUPS;
+        } else if (streq(key, "timeLimit")) {
+            if (!json_object_is_type(value, json_type_int) ||
+                json_object_get_int64(value) <= 0)
+                return 0;
+            key_flags |= HAS_TIME_LIMIT;
+        } else if (streq(key, "startTime")) {
+            if (!json_object_is_type(value, json_type_int) ||
+                json_object_get_int64(value) <= 0)
+                return 0;
+            key_flags |= HAS_START_TIME;
+        } else if (streq(key, "endTime")) {
+            if (!json_object_is_type(value, json_type_int) ||
+                json_object_get_int64(value) <= 0)
+                return 0;
+            key_flags |= HAS_END_TIME;
+        } else if (streq(key, "questions")) {
+            if (!json_object_is_type(value, json_type_array))
+                return 0;
+            key_flags |= HAS_QUESTIONS;
+        } else if (streq(key, "correctAnswers")) {
+            if (!json_object_is_type(value, json_type_array))
+                return 0;
+            key_flags |= HAS_CORRECT_ANSWERS;
+        } else
+            return 0;
+            
+        json_object_iter_next(&it);
+    }
+
+    if (key_flags != (HAS_NAME | HAS_TYPE | HAS_GROUPS | HAS_TIME_LIMIT |
+        HAS_START_TIME | HAS_END_TIME | HAS_QUESTIONS | HAS_CORRECT_ANSWERS))
+        return 0;
+
+    json_object *start_time;
+    json_object *end_time;
+    json_object_object_get_ex(test, "startTime", &start_time);
+    json_object_object_get_ex(test, "endTime", &end_time);
+
+    if (json_object_get_int64(start_time) > json_object_get_int64(end_time))
+        return 0;
+        
+    return 1;
+}
+
+int submit_test(const char *username, json_object *test)
+{
+    if (!test_is_valid(test))
+        return -1;
+
+    json_object *tests = get_tests();
+
+    uuid_t id;
+    char id_string[37];
+    uuid_generate(id);
+    uuid_unparse(id, id_string);
+    
+    json_object_object_add(test, "id", json_object_new_string(id_string));
+    json_object_object_add(test, "owner", json_object_new_string(username));
+    json_object_object_add(test, "resultsAvailable", json_object_new_boolean(FALSE));
+    
+    json_object_array_add(tests, test);
+    put_tests(tests);
+    json_object_put(tests);
+    
+    return 0;
+}
+
+bool is_array_of_json_type(json_object *obj, json_type type)
+{
+    if (!json_object_is_type(obj, json_type_array))
+        return false;
+    for (int i = 0; i < json_object_array_length(obj); i++) {
+        json_object *el = json_object_array_get_idx(obj, i);
+        if (!json_object_is_type(el, type))
+            return false;
+    }
+    return true;
+}
+
+struct key_type {
+    const char *key;
+    json_type type;
+};
+
+bool object_has_key_types(json_object *obj, const struct key_type *k)
+{
+    if (!json_object_is_type(obj, json_type_object))
+        return false;
+
+    int i = 0;
+    for (; k->key; k++) {
+        json_object *sub_obj;
+        if (json_object_object_get_ex(obj, k->key, &sub_obj) != TRUE ||
+            !json_object_is_type(sub_obj, k->type))
+                return false;
+        i++;
+    }
+    
+    if (json_object_object_length(obj) != i)
+        return false;
+        
+    return true;
+}
+
+bool group_is_valid(json_object *group)
+{
+    static const struct key_type keytypes[] = {
+        { "name", json_type_string },
+        { "fullName", json_type_string },
+        { "members", json_type_array },
+        { NULL, json_type_null }
+    };
+
+    if (!object_has_key_types(group, keytypes))
+        return false;
+
+    json_object *members;
+    json_object_object_get_ex(group, "members", &members);
+    if (!is_array_of_json_type(members, json_type_string))
+        return false;
+
+    return true;
+}
+
+bool groups_are_valid(json_object *groups)
+{
+    if (!json_object_is_type(groups, json_type_array))
+        return false;
+        
+    for (int i = 0; i < json_object_array_length(groups); i++) {
+        json_object *group = json_object_array_get_idx(groups, i);
+        if (!group_is_valid(group))
+            return false;
+    }
+
+    return true;
+}
+
+int submit_groups(json_object *groups)
+{
+    if (!groups_are_valid(groups))
+        return -1;
+        
+    put_groups(groups);
+    return 0;
 }

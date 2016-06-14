@@ -38,3 +38,8 @@ void log_errno_die(char *s)
 {
     log_msg_die("%s: %s\n", s, strerror(errno));
 }
+
+int streq(const char *a, const char *b)
+{
+    return !strcmp(a, b);
+}

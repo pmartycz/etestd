@@ -3,12 +3,16 @@
 #include <string.h>
 #include <errno.h>
 #include <json-c/json.h>
+#include <nettle/md5.h>
+#include <nettle/base16.h>
 
 #include "common.h"
 #include "protocol.h"
 #include "db.h"
 
-#define JSON_FLAGS JSON_C_TO_STRING_PLAIN
+#define JSON_FLAGS  JSON_C_TO_STRING_PLAIN
+#define LINE_LEN    1024
+#define NO_AUTH     0
 
 int has_required_auth_level(int required_auth_level, int peer_auth_level)
 {
@@ -91,25 +95,25 @@ static const struct method_map {
         "GET",
         (const char *[]) { "TEST", "TESTS", "USERS", "GROUPS", NULL },
         (struct request_info []) {
-            { REQUEST_GET_TEST,     AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER },
-            { REQUEST_GET_TESTS,    AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER },
+            { REQUEST_GET_TEST,     AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR },
+            { REQUEST_GET_TESTS,    AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR },
             { REQUEST_GET_USERS,    AUTH_LEVEL_STUDENT | AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR },
             { REQUEST_GET_GROUPS,   AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR }
         }
     },
     {
         "PUT",
-        (const char *[]) { "ANSWERS", "TEST", "USER", "GROUP", NULL }, /* {TEST|USER|GROUP}S ? */
+        (const char *[]) { "ANSWERS", "TEST", "USER", "GROUPS", NULL },
         (struct request_info []) {
             { REQUEST_PUT_ANSWERS,  AUTH_LEVEL_STUDENT },
             { REQUEST_PUT_TEST,     AUTH_LEVEL_EXAMINER },
             { REQUEST_PUT_USER,     AUTH_LEVEL_ADMINISTRATOR },
-            { REQUEST_PUT_GROUP,    AUTH_LEVEL_ADMINISTRATOR }
+            { REQUEST_PUT_GROUPS,    AUTH_LEVEL_ADMINISTRATOR }
         }
     },
     {
         "DELETE",
-        (const char *[]) { "TEST", "USER", "GROUP", NULL }, /* {TEST|USER|GROUP}S ? */
+        (const char *[]) { "TEST", "USER", "GROUP", NULL },
         (struct request_info []) {
             { REQUEST_DELETE_TEST,  AUTH_LEVEL_EXAMINER | AUTH_LEVEL_ADMINISTRATOR },
             { REQUEST_DELETE_USER,  AUTH_LEVEL_ADMINISTRATOR },
@@ -157,34 +161,6 @@ static const struct request_info *parse_request(char *request_line, char **line_
     return NULL;
 }
 
-int auth(const char *username, struct credentials *peer_creds)
-{
-    json_object *users = get_users(); 
-    if (!entity_exists(username, users))
-        return -1; /* user doesn't exist */
-
-    /* TODO authentication */
-
-    peer_creds->username = strdup(username);
-    
-    json_object_put(users);
-
-    /* authorization */
-    
-    json_object *groups = get_groups();
-
-    if (user_is_administrator(username, groups))
-        peer_creds->auth_level = AUTH_LEVEL_ADMINISTRATOR;
-    else if (user_is_examiner(username, groups))
-        peer_creds->auth_level = AUTH_LEVEL_EXAMINER;
-    else
-        peer_creds->auth_level = AUTH_LEVEL_STUDENT;
-
-    json_object_put(groups);
-        
-    return 0;
-}
-
 static const char *auth_level_to_string(int auth_level)
 {
     switch (auth_level) {
@@ -204,6 +180,85 @@ static const char *auth_level_to_string(int auth_level)
             return "UNKNOWN";
     }
     
+}
+
+int authenticate_user(const char *username, const char *password_hash, FILE *peer_stream)
+{
+#if NO_AUTH
+    return 0;
+#endif
+    uuid_t nonce;
+    uuid_generate_random(nonce);
+    char nonce_s[37];
+    uuid_unparse(nonce, nonce_s);
+
+    send_reply_ok(peer_stream, "%s", nonce_s);
+
+    struct md5_ctx ctx;
+    md5_init(&ctx);
+    md5_update(&ctx, strlen(password_hash), (uint8_t *) password_hash);
+    md5_update(&ctx, strlen(nonce_s), (uint8_t *) nonce_s);
+    uint8_t my_digest[MD5_DIGEST_SIZE];
+    md5_digest(&ctx, MD5_DIGEST_SIZE, my_digest);
+
+    char line[LINE_LEN];
+    if (fgets(line, LINE_LEN, peer_stream) == NULL)
+        return -1;
+    line[strcspn(line, "\r\n")] = '\0';
+
+    if (strlen(line) != BASE16_ENCODE_LENGTH(MD5_DIGEST_SIZE))
+        return -1;
+
+    struct base16_decode_ctx decode_ctx;
+    base16_decode_init(&decode_ctx);
+    size_t dst_length;
+    uint8_t peer_digest[MD5_DIGEST_SIZE];
+    if (base16_decode_update(&decode_ctx, &dst_length, peer_digest,
+        BASE16_ENCODE_LENGTH(MD5_DIGEST_SIZE), (uint8_t *) line) && base16_decode_final(&decode_ctx))
+        if (memcmp(my_digest, peer_digest, MD5_DIGEST_SIZE) == 0)
+            return 0;
+            
+    return -1;
+}
+
+void authorize_user(const char *username, struct credentials *peer_creds)
+{
+    peer_creds->username = strdup(username);
+
+    json_object *groups = get_groups();
+
+    if (user_is_administrator(username, groups))
+        peer_creds->auth_level = AUTH_LEVEL_ADMINISTRATOR;
+    else if (user_is_examiner(username, groups))
+        peer_creds->auth_level = AUTH_LEVEL_EXAMINER;
+    else
+        peer_creds->auth_level = AUTH_LEVEL_STUDENT;
+
+    json_object_put(groups);
+}
+
+int handle_request_user(const char *username, struct credentials *peer_creds, FILE *peer_stream)
+{
+    json_object *users = get_users();
+    json_object *user = get_entity(username, users);
+    json_object *password_hash = NULL;
+
+    int ret;
+    if (user &&
+        json_object_object_get_ex(user, "passwordHash", &password_hash) == TRUE &&
+        json_object_is_type(password_hash, json_type_string) &&
+        authenticate_user(username, json_object_get_string(password_hash), peer_stream) == 0) {
+            authorize_user(username, peer_creds);
+            send_reply_ok(peer_stream, "%s Hello %s, how are you?", auth_level_to_string(peer_creds->auth_level), username);
+            ret = 0;
+    } else {
+            send_reply_err(peer_stream, "auth error");
+            ret = -1;
+    }
+    
+    json_object_put(users);
+            
+    return ret;
 }
 
 json_object *get_tests_for_user(const struct credentials *peer_creds)
@@ -315,30 +370,35 @@ int handle_request_get_groups(const struct credentials *peer_creds, FILE *peer_s
     return 0;
 }
 
-int handle_request_put_answers(uuid_t id, const struct credentials *peer_creds, FILE *peer_stream)
+json_object *parse_json(FILE *peer_stream)
 {
-    send_reply_ok(peer_stream, "go ahead, send me your answers");
-    
-    char line[1024];
-    json_object *answers = NULL;
+    char line[LINE_LEN];
+    json_object *obj = NULL;
     json_tokener *tok = json_tokener_new();
-    enum json_tokener_error jerr;
     
     do {
-        if (fgets(line, sizeof(line), peer_stream) == NULL)
+        if (fgets(line, LINE_LEN, peer_stream) == NULL)
             break;
-        answers = json_tokener_parse_ex(tok, line, -1);
-    } while ((jerr = json_tokener_get_error(tok)) == json_tokener_continue);
+        obj = json_tokener_parse_ex(tok, line, strlen(line));
+    } while (json_tokener_get_error(tok) == json_tokener_continue);
     
     json_tokener_free(tok);
     
-    if (jerr != json_tokener_success) {
+    return obj;
+}
+
+int handle_request_put_answers(uuid_t id, const char *username, FILE *peer_stream)
+{
+    send_reply_ok(peer_stream, "go ahead, send me your answers");
+
+    json_object *answers = parse_json(peer_stream);
+
+    if (!answers) {
         send_reply_err(peer_stream, "input error");
-        json_object_put(answers);
         return -1;
     }
 
-    if (submit_answers(id, peer_creds->username, answers) != 0) {
+    if (submit_answers(id, username, answers) != 0) {
         send_reply_err(peer_stream, "submit error");
         json_object_put(answers);
         return -1;
@@ -348,8 +408,58 @@ int handle_request_put_answers(uuid_t id, const struct credentials *peer_creds, 
     return 0;
 }
 
-int handle_request(char *request_line, struct credentials *peer_creds, FILE *peer_stream)
+int handle_request_put_test(const char *username, FILE *peer_stream)
 {
+    send_reply_ok(peer_stream, "now send me the test");
+    
+    json_object *test = parse_json(peer_stream);
+    
+    if (!test) {
+        send_reply_err(peer_stream, "input error");
+        return -1;
+    }
+
+    if (submit_test(username, test) != 0) {
+        send_reply_err(peer_stream, "submit error");
+        json_object_put(test);
+        return -1;
+    }
+
+    send_reply_ok(peer_stream, "test added");
+    return 0;
+}
+
+int handle_request_put_groups(FILE *peer_stream)
+{
+    send_reply_ok(peer_stream, "send me the groups");
+
+    json_object *groups = parse_json(peer_stream);
+
+    if (!groups) {
+        send_reply_err(peer_stream, "input error");
+        return -1;
+    }
+
+    int ret;
+    if (submit_groups(groups) == 0) {
+        send_reply_ok(peer_stream, "groups added");
+        ret = 0;
+    } else {
+        send_reply_err(peer_stream, "submit error");
+        ret = -1;
+    }
+
+    json_object_put(groups);
+
+    return ret;
+}
+
+int handle_request(struct credentials *peer_creds, FILE *peer_stream)
+{
+    char request_line[LINE_LEN];
+    if (fgets(request_line, LINE_LEN, peer_stream) == NULL)
+        return -1;
+    
     char *line_ptr;
     
     const struct request_info *req_info = parse_request(request_line, &line_ptr);
@@ -371,14 +481,7 @@ int handle_request(char *request_line, struct credentials *peer_creds, FILE *pee
                 send_reply_err(peer_stream, "invalid request");
                 return -1;
             }
-            if (auth(username, peer_creds) == 0) {
-                send_reply_ok(peer_stream, "%s Hello %s, how are you?",
-                    auth_level_to_string(peer_creds->auth_level), username);
-            } else {
-                send_reply_err(peer_stream, "auth error");
-                return -1;
-            }
-            break;
+            return handle_request_user(username, peer_creds, peer_stream);
         }
         
         case REQUEST_GET_TESTS:
@@ -411,12 +514,16 @@ int handle_request(char *request_line, struct credentials *peer_creds, FILE *pee
                 return -1;
             }
             
-            return handle_request_put_answers(id, peer_creds, peer_stream);
+            return handle_request_put_answers(id, peer_creds->username, peer_stream);
         }
         
         case REQUEST_PUT_TEST:
+            return handle_request_put_test(peer_creds->username, peer_stream);
+            
+        case REQUEST_PUT_GROUPS:
+            return handle_request_put_groups(peer_stream);
+            
         case REQUEST_PUT_USER:
-        case REQUEST_PUT_GROUP:
         case REQUEST_DELETE_TEST:
         case REQUEST_DELETE_USER:
         case REQUEST_DELETE_GROUP:

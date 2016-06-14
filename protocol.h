@@ -7,8 +7,6 @@ enum {
     AUTH_LEVEL_ADMINISTRATOR =  0x8
 };
 
-/* These serve as indexes to request_required_auth_levels[]
- * Do not change order! */
 enum {
     REQUEST_USER,
     REQUEST_GET_TEST,
@@ -18,11 +16,11 @@ enum {
     REQUEST_PUT_ANSWERS,
     REQUEST_PUT_TEST,
     REQUEST_PUT_USER,
-    REQUEST_PUT_GROUP,
+    REQUEST_PUT_GROUPS,
     REQUEST_DELETE_TEST,
     REQUEST_DELETE_USER,
     REQUEST_DELETE_GROUP,
-    REQUEST_BYE /* This one must be last */
+    REQUEST_BYE
 };
 
 enum {
@@ -39,4 +37,4 @@ int send_reply_ok(FILE *stream, const char *format, ...);
 
 int send_reply_err(FILE *stream, const char *format, ...);
 
-int handle_request(char *request_line, struct credentials *peer_creds, FILE *peer_stream);
+int handle_request(struct credentials *peer_creds, FILE *peer_stream);

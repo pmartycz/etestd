@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall
-LDLIBS = -ljson-c -luuid
+LDLIBS = -ljson-c -luuid -lnettle
 objects = main.o common.o db.o protocol.o
 
 all : debug

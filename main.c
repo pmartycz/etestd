@@ -9,6 +9,7 @@
 #include <string.h>
 #include <json-c/json.h>
 #include <uuid/uuid.h>
+#include <signal.h>
 
 #include "common.h"
 #include "db.h"
@@ -17,8 +18,6 @@
 #define DEFAULT_DB_DIR "./examples" /* change later */
 #define DEFAULT_PORT "50000"
 #define VERSION "0.1"
-
-#define LINE_MAX 1024
 
 static const char *db_dir = DEFAULT_DB_DIR;
 static const char *port = DEFAULT_PORT;
@@ -190,6 +189,8 @@ int main(int argc, char *argv[])
     if (listen_fd == -1)
         log_msg_die("Could not create listening socket on port %s\n", port);
 
+    signal(SIGPIPE, SIG_IGN);
+
     for (;;) {
         int peer_fd = accept_connection(listen_fd);
         if (peer_fd == -1)
@@ -206,12 +207,8 @@ int main(int argc, char *argv[])
         send_reply_ok(peer_stream, "Etestd %s", VERSION);
         struct credentials peer_creds = { NULL, AUTH_LEVEL_UNAUTHORIZED };
 
-        for (;;) {
-            char line[LINE_MAX];
-            fgets(line, LINE_MAX, peer_stream);
-            if (handle_request(line, &peer_creds, peer_stream) != 0)
-                break;
-        }
+        while (handle_request(&peer_creds, peer_stream) == 0)
+            ;
 
         free(peer_creds.username);
         fclose(peer_stream);
