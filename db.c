@@ -338,7 +338,7 @@ json_object *get_test_for_student(uuid_t id, const char *username, json_object *
     
     /* If there is no answer record (i.e. student gets test for the first time)
      * create an empty one with current time logged */
-    int64_t user_start_time;
+    int64_t user_start_time = 0;
     if (!user_record) {
         user_start_time = create_user_answers_record(id, username, answers);
         put_answers(answers);
@@ -351,7 +351,7 @@ json_object *get_test_for_student(uuid_t id, const char *username, json_object *
                 
         json_object *creation_time;
         if (json_object_object_get_ex(user_record, "creationTime", &creation_time) == TRUE &&
-            json_object_is_type(user_answers, json_type_int))
+            json_object_is_type(creation_time, json_type_int))
                 user_start_time = json_object_get_int64(creation_time);
     }
     
