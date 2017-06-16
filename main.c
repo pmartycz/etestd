@@ -1,3 +1,11 @@
+/**
+ * @file
+ * @author Piotr Martycz <pmartycz@gmail.com>
+ *
+ * @section DESCRIPTION
+ * The main module.
+ */
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>

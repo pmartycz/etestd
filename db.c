@@ -1,3 +1,11 @@
+/**
+ * @file
+ * @author Piotr Martycz <pmartycz@gmail.com>
+ *
+ * @section DESCRIPTION
+ * Module for database access and JSON manipulation.
+ */
+ 
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
@@ -21,6 +29,13 @@ static FILE *answers_file;
 static FILE *users_file;
 static FILE *groups_file;
 
+/**
+ * Open database files
+ *
+ * @param db_dir directory where database is located
+ *
+ * @return 0 on success
+ */
 int open_db(const char *db_dir)
 {
     int ret = 0;
@@ -74,6 +89,9 @@ out:
     return ret;
 }
 
+/**
+ * Close database files
+ */
 void close_db(void)
 {
     fclose(tests_file);
@@ -81,7 +99,16 @@ void close_db(void)
     fclose(users_file);
     fclose(groups_file);
 }
- 
+
+/**
+ * Read contents of a file to dynamically
+ * allocated string
+ *
+ * @param fp stream opened for reading 
+ *
+ * @return Pointer to buffer with file contents
+ * or NULL on error.
+ */
 static char *file_to_string(FILE *fp)
 {
     /* Go to the end of the file. */
@@ -114,6 +141,16 @@ static char *file_to_string(FILE *fp)
     return buf;
 }
 
+
+/**
+ * Get JSON object from file
+ *
+ * Parses file and creates a json_object from
+ * its contents.
+ *
+ * @param file stream
+ * @return pointer to json_object
+ */
 static json_object *get_json_from_file(FILE *fp)
 {
     char *json_string = file_to_string(fp);
@@ -129,21 +166,33 @@ static json_object *get_json_from_file(FILE *fp)
     return obj;
 }
 
+/**
+ * Get json_object containing users database
+ */
 json_object *get_users(void)
 {
     return get_json_from_file(users_file);
 }
 
+/**
+ * Get json_object containing groups database
+ */
 json_object *get_groups(void)
 {
     return get_json_from_file(groups_file);
 }
 
+/**
+ * Get json_object containing tests database
+ */
 json_object *get_tests(void)
 {
     return get_json_from_file(tests_file);
 }
 
+/**
+ * Get json_object containing answers database
+ */
 json_object *get_answers(void)
 {
     json_object *answers = get_json_from_file(answers_file);
@@ -153,6 +202,12 @@ json_object *get_answers(void)
     return answers;
 }
 
+/**
+ * Write JSON data to file
+ *
+ * @param obj JSON data
+ * @param file stream opened for writing
+ */
 static void put_json_to_file(json_object *obj, FILE *fp)
 {
     fseek(fp, 0, SEEK_SET);
@@ -164,21 +219,35 @@ static void put_json_to_file(json_object *obj, FILE *fp)
         log_msg_die("Database write error");
 }
 
+/**
+ * Write json_object to answers database
+ */
 void put_answers(json_object *answers)
 {
     put_json_to_file(answers, answers_file);
 }
 
+/**
+ * Write json_object to tests database
+ */
 void put_tests(json_object *tests)
 {
     put_json_to_file(tests, tests_file);
 }
 
+/**
+ * Write json_object to groups database
+ */
 void put_groups(json_object *groups)
 {
     put_json_to_file(groups, groups_file);
 }
 
+/**
+ * Check if JSON object key has value equal to str
+ * 
+ * @param obj json_object of type json_type_object
+ */
 static int key_value_equals_str(json_object *obj, const char *key, const char *str)
 {
     json_object *value;
@@ -189,6 +258,12 @@ static int key_value_equals_str(json_object *obj, const char *key, const char *s
     return 0;
 }
 
+
+/**
+ * Check if JSON object key value equals uuid
+ * 
+ * @param obj json_object of type json_type_object
+ */
 static int key_value_equals_uuid(json_object *obj, const char *key, uuid_t uuid)
 {
     json_object *value;
@@ -202,6 +277,11 @@ static int key_value_equals_uuid(json_object *obj, const char *key, uuid_t uuid)
     return 0;
 }
 
+/**
+ * Check if JSON object key value is of type null
+ * 
+ * @param obj json_object of type json_type_object
+ */
 static int key_value_is_null(json_object *obj, const char *key)
 {
     json_object *value;

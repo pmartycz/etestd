@@ -1,3 +1,11 @@
+/**
+ * @file
+ * @author Piotr Martycz <pmartycz@gmail.com>
+ *
+ * @section DESCRIPTION
+ * Module implementing protocol for communication with client.
+ */
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
