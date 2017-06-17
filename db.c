@@ -561,6 +561,27 @@ json_object *get_tests_for_student(const char *username)
             }
         }
     }
+    
+    /* Add userStartTime for each test for which user answer record exists */
+    json_object *answers = get_answers();
+    for (int i = 0; i < json_object_array_length(tests); i++) {
+        json_object *test = json_object_array_get_idx(tests, i);
+        json_object *test_id;
+        if (json_object_object_get_ex(test, "id", &test_id) && 
+                json_object_is_type(test_id, json_type_string)) {
+            uuid_t id;
+            uuid_parse(json_object_get_string(test_id), id);
+            json_object *user_record = get_user_answers_record(id, username, answers);
+            if (user_record) {
+                json_object *creation_time;
+                if (json_object_object_get_ex(user_record, "creationTime", &creation_time) == TRUE &&
+                        json_object_is_type(creation_time, json_type_int))
+                    json_object_object_add(test, "userStartTime", json_object_get(creation_time));
+            }
+        }
+            
+    }
+    json_object_put(answers);
      
 cleanup:
     json_object_put(groups);
