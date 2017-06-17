@@ -157,7 +157,7 @@ static void parse_args(int argc, char* argv[])
     static struct option long_options[] = {
         {"db-dir", required_argument, 0, ARG_DB_DIR},
         {"port", required_argument, 0, ARG_PORT},
-        {"help", required_argument, 0, 'h'},
+        {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
     
