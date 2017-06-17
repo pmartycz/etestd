@@ -16,14 +16,14 @@
 
 [
     {
-        "id": "c10ae7c7-3b1d-48d7-b949-e0165b3f3822",
-        "name": "Przykładowy egzamin (test wielokrotnego wyboru)",
+        "id": "ee66f120-c8cf-45a0-b333-4b3d6ac352cd",
+        "name": "Przykładowy zamknięty egzamin",
         "type": "multi",
         "owner": "anna",
         "groups": [ "bd", "sk" ],
         "timeLimit": 10,
-        "startTime": 1460583976,
-        "endTime": 1483225200,
+        "startTime": 4070905200,
+        "endTime": 4070991600,
         "resultsAvailable": false,
         "questions": [
             {
@@ -60,8 +60,52 @@
         ]
     },
     {
+        "id": "c10ae7c7-3b1d-48d7-b949-e0165b3f3822",
+        "name": "Przykładowy zakończony egzamin (test wielokrotnego wyboru)",
+        "type": "multi",
+        "owner": "anna",
+        "groups": [ "bd", "sk" ],
+        "timeLimit": 10,
+        "startTime": 1460583976,
+        "endTime": 1483225200,
+        "resultsAvailable": true,
+        "questions": [
+            {
+                "text": "Które z typów danych występują w formacie JSON?",
+                "options": [
+                    "Liczbowy", "Napisowy", "Boolowski", "Wskaźnikowy", "Tablicowy"
+                ]
+            },
+            {
+                "text": "Na jakim kontynencie leży Polska?",
+                "options": [
+                    "Europa",
+                    "Azja",
+                    "Afryka",
+                    "Ameryka Południowa",
+                    "Ameryka Północna"
+                ]
+            },
+            {
+                "text": "Jak ma na nazwisko twórca Linuksa?",
+                "options": [
+                    "Gates",
+                    "Torvalds",
+                    "Jobs",
+                    "Kernighan",
+                    "Pike"
+                ]
+            }
+        ],
+        "correctAnswers": [
+            [ true, true, true, false, true ],
+            [ true, false, false, false, false ],
+            [ false, true, false, false, false ]
+        ]
+    },
+    {
         "id": "6fc51d84-b28b-4390-9c09-74ec4107ed00",
-        "name": "Przykładowy egzamin 2 (test jednokrotnego wyboru)",
+        "name": "Przykładowy zakończony egzamin (test jednokrotnego wyboru)",
         "type": "single",
         "owner": "anna",
         "groups": [ "io", "sk" ],
@@ -69,6 +113,90 @@
         "startTime": 1460583976,
         "endTime": 1460603976,
         "resultsAvailable": true,
+        "questions": [
+            {
+                "text": "Który z typów danych _nie_ występuje w formacie JSON?",
+                "options": [
+                    "Liczbowy", "Napisowy", "Boolowski", "Wskaźnikowy", "Tablicowy"
+                ]
+            },
+            {
+                "text": "Na jakim kontynencie leży Polska?",
+                "options": [
+                    "Europa",
+                    "Azja",
+                    "Afryka",
+                    "Ameryka Południowa",
+                    "Ameryka Północna"
+                ]
+            },
+            {
+                "text": "Jak ma na nazwisko twórca Linuksa?",
+                "options": [
+                    "Gates",
+                    "Torvalds",
+                    "Jobs",
+                    "Kernighan",
+                    "Pike"
+                ]
+            }
+        ],
+        "correctAnswers": [ 3, 0, 1 ]
+    },
+    {
+        "id": "e2402be7-be32-48d2-904b-696fb9ef78ea",
+        "name": "Przykładowy otwarty egzamin (test wielokrotnego wyboru)",
+        "type": "multi",
+        "owner": "anna",
+        "groups": [ "bd", "sk" ],
+        "timeLimit": 10,
+        "startTime": 1460583976,
+        "endTime": 4070905200,
+        "resultsAvailable": false,
+        "questions": [
+            {
+                "text": "Które z typów danych występują w formacie JSON?",
+                "options": [
+                    "Liczbowy", "Napisowy", "Boolowski", "Wskaźnikowy", "Tablicowy"
+                ]
+            },
+            {
+                "text": "Na jakim kontynencie leży Polska?",
+                "options": [
+                    "Europa",
+                    "Azja",
+                    "Afryka",
+                    "Ameryka Południowa",
+                    "Ameryka Północna"
+                ]
+            },
+            {
+                "text": "Jak ma na nazwisko twórca Linuksa?",
+                "options": [
+                    "Gates",
+                    "Torvalds",
+                    "Jobs",
+                    "Kernighan",
+                    "Pike"
+                ]
+            }
+        ],
+        "correctAnswers": [
+            [ true, true, true, false, true ],
+            [ true, false, false, false, false ],
+            [ false, true, false, false, false ]
+        ]
+    },
+    {
+        "id": "f6268c53-3cc9-496e-b5c2-34e12fde97e7",
+        "name": "Przykładowy otwarty egzamin (test jednokrotnego wyboru)",
+        "type": "single",
+        "owner": "anna",
+        "groups": [ "io", "sk" ],
+        "timeLimit": 10,
+        "startTime": 1460583976,
+        "endTime": 4070905200,
+        "resultsAvailable": false,
         "questions": [
             {
                 "text": "Który z typów danych _nie_ występuje w formacie JSON?",

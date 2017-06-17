@@ -1,0 +1,48 @@
+[
+   {
+     "testId": "c10ae7c7-3b1d-48d7-b949-e0165b3f3822",
+     "subjects": [
+       {
+         "name": "jan",
+         "answers": [
+           [
+             true,
+             true,
+             true,
+             false,
+             true
+           ],
+           [
+             true,
+             false,
+             false,
+             true,
+             false
+           ],
+           [
+             false,
+             true,
+             false,
+             false,
+             false
+           ]
+         ],
+         "creationTime": 1460583981
+       }
+     ]
+   },
+   {
+     "testId": "6fc51d84-b28b-4390-9c09-74ec4107ed00",
+     "subjects": [
+       {
+         "name": "jan",
+         "answers": [
+           3,
+           2,
+           1
+         ],
+         "creationTime": 1460583980
+       }
+     ]
+   }
+ ]
