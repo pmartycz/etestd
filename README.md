@@ -20,3 +20,6 @@ make
 yum install gcc make json-c-devel libuuid-devel nettle-devel  
 make
 ```
+
+### Documentation
+See etestd [wiki](https://github.com/pmartycz/etestd/wiki).
