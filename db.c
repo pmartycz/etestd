@@ -420,14 +420,18 @@ json_object *get_test_for_student(uuid_t id, const char *username, json_object *
      * create an empty one with current time logged */
     int64_t user_start_time = 0;
     if (!user_record) {
-        user_start_time = create_user_answers_record(id, username, answers);
-        put_answers(answers);
+        if (now < json_object_get_int64(end_time)) {
+            user_start_time = create_user_answers_record(id, username, answers);
+            put_answers(answers);
+        }
     /* Else if user has submitted answers add them to test */    
     } else {
         json_object *user_answers;
         if (json_object_object_get_ex(user_record, "answers", &user_answers) == TRUE &&
-            !json_object_is_type(user_answers, json_type_null))
+            !json_object_is_type(user_answers, json_type_null)) {
                 json_object_object_add(test, "userAnswers", json_object_get(user_answers));
+                json_object_object_add(test, "userSubmittedAnswers", json_object_new_boolean(TRUE));
+        }
                 
         json_object *creation_time;
         if (json_object_object_get_ex(user_record, "creationTime", &creation_time) == TRUE &&
@@ -435,7 +439,8 @@ json_object *get_test_for_student(uuid_t id, const char *username, json_object *
                 user_start_time = json_object_get_int64(creation_time);
     }
     
-    json_object_object_add(test, "userStartTime", json_object_new_int64(user_start_time));
+    if (user_start_time != 0)
+        json_object_object_add(test, "userStartTime", json_object_new_int64(user_start_time));
 
     json_object_put(answers);
     return test;
@@ -572,11 +577,18 @@ json_object *get_tests_for_student(const char *username)
             uuid_t id;
             uuid_parse(json_object_get_string(test_id), id);
             json_object *user_record = get_user_answers_record(id, username, answers);
+            
             if (user_record) {
                 json_object *creation_time;
                 if (json_object_object_get_ex(user_record, "creationTime", &creation_time) == TRUE &&
                         json_object_is_type(creation_time, json_type_int))
                     json_object_object_add(test, "userStartTime", json_object_get(creation_time));
+                
+                json_object *user_answers;
+                if (json_object_object_get_ex(user_record, "answers", &user_answers) == TRUE &&
+                    !json_object_is_type(user_answers, json_type_null)) {
+                        json_object_object_add(test, "userSubmittedAnswers", json_object_new_boolean(TRUE));
+                }
             }
         }
             

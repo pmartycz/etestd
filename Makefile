@@ -3,16 +3,16 @@ CFLAGS = -Wall
 LDLIBS = -ljson-c -luuid -lnettle
 objects = main.o common.o db.o protocol.o
 
-all : debug
+all : etestd
 
 etestd : $(objects)
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
+etestd-static : $(objects)
+	$(CC) $(LDFLAGS) -static $^ $(LDLIBS) -o $@	
+
 debug : CFLAGS += -g
 debug : etestd
-
-static : LDFLAGS += -static
-static : etestd
 
 $(objects) : common.h
 common.o : common.h
@@ -21,4 +21,4 @@ protocol.o : protocol.h
 
 .PHONY : clean debug
 clean :
-	$(RM) etestd $(objects)
+	$(RM) etestd etestd-static $(objects)
