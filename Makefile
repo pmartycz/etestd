@@ -11,6 +11,9 @@ etestd : $(objects)
 debug : CFLAGS += -g
 debug : etestd
 
+static : LDFLAGS += -static
+static : etestd
+
 $(objects) : common.h
 common.o : common.h
 db.o : db.h
